@@ -44,6 +44,14 @@ var retrieve = function (key, q, endpoint, opts) {
     , i = opts.max
 
   var loop = function(page) {
+
+    var startHistoryId = null;
+    // Check if we're getting messages after a particular historyId
+    if (opts.startHistoryId) {
+      startHistoryId = opts.startHistoryId;
+      endpoint = 'history?startHistoryId=' + startHistoryId;
+    }
+
     var reqOpts = {
       url: api + '/gmail/v1/users/me/' + endpoint,
       json: true,
@@ -68,15 +76,38 @@ var retrieve = function (key, q, endpoint, opts) {
         return result.emit('error', new Error(body.error.message))
       }
 
-      result.resultSizeEstimate = body.resultSizeEstimate
+      if (startHistoryId) {
+        endpoint = 'history';
+        var messagesAdded = body[endpoint].filter(function(element, index, array){
+          if (element.messagesAdded) {
+            return true;
+          }
+          return false;
+        });
 
-      if (!result.resultSizeEstimate) {
-        return result.end()
+        body[endpoint] = messagesAdded.map(function(h){
+          message = h.messages.pop();
+          return {
+            id: message.id
+          };
+        });
       }
+      else {
+        result.resultSizeEstimate = body.resultSizeEstimate
+
+        if (!result.resultSizeEstimate) {
+          return result.end()
+        }
+      }
+
       var messages = body[endpoint].map(function (m) {
+        var processedEndpoint = endpoint;
+        if (endpoint == 'history') {
+          processedEndpoint = 'messages';
+        }
         return {
           'Content-Type': 'application/http',
-          body: 'GET ' + api + '/gmail/v1/users/me/' + endpoint + '/' + m.id + fields + '\n'
+          body: 'GET ' + api + '/gmail/v1/users/me/' + processedEndpoint + '/' + m.id + fields + '\n'
         }
       })
 
